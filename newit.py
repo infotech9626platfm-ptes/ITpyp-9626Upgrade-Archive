@@ -36,7 +36,6 @@ LOCAL_FOLDERS = {
 for folder_path in LOCAL_FOLDERS.values():
     os.makedirs(folder_path, exist_ok=True)
 
-
 # ==========================================
 # 2. GOOGLE DRIVE API & HELPER FUNCTIONS
 # ==========================================
@@ -63,7 +62,6 @@ def get_cached_drive_service():
     except Exception as e:
         st.error(f"❌ Service Account Auth Error: {e}")
         return None
-
 
 def sync_drive_folder_to_local(folder_key: str) -> tuple[int, str]:
     """Downloads missing files from Google Drive to local directories."""
@@ -97,7 +95,6 @@ def sync_drive_folder_to_local(folder_key: str) -> tuple[int, str]:
         return downloaded_count, f"Synced {downloaded_count} new file(s) for `{folder_key}`."
     except Exception as e:
         return 0, f"Sync error on `{folder_key}`: {e}"
-
 
 # ==========================================
 # 3. SEARCH & RENDERING ENGINE
@@ -141,7 +138,6 @@ def search_pdfs(keyword_list, folder_path, allowed_variants):
                 continue
     return results
 
-
 def render_pdf_page_image(file_path: str, page_num: int) -> bytes:
     pdf_doc = fitz.open(file_path)
     page = pdf_doc.load_page(page_num)
@@ -149,7 +145,6 @@ def render_pdf_page_image(file_path: str, page_num: int) -> bytes:
     img_bytes = pix.tobytes("png")
     pdf_doc.close()
     return img_bytes
-
 
 # ==========================================
 # 4. WORD DOCUMENT HANDOUT BUILDER
@@ -170,7 +165,6 @@ def add_page_number_to_header(run):
     r.append(instrText)
     r.append(fldChar2)
     r.append(fldChar3)
-
 
 def create_custom_word_handout(basket_items, syllabus_code):
     doc = Document()
@@ -209,7 +203,6 @@ def create_custom_word_handout(basket_items, syllabus_code):
             doc.add_page_break()
 
     return doc
-
 
 # ==========================================
 # 5. STREAMLIT UI LAYOUT & STYLING
@@ -324,10 +317,9 @@ tab1, tab2, tab3, tab4, tab5 = st.tabs([
     "🔒 Admin Panel"
 ])
 
-
 # --- TAB 1: THEORY SEARCH ---
 with tab1:
-    st.header("Search Theory Papers (Paper 1 & Paper 3)")
+    st.subheader("Search Theory Papers (Paper 1 & Paper 3)")
     st.caption("Variants: Paper 1 (11, 12, 13) | Paper 3 (31, 32, 33)")
     keyword_t1 = st.text_input("Enter Theory Keywords (e.g., 'Normalized', 'Relational Database', 'CSS')", key="t1_kw")
 
@@ -370,7 +362,7 @@ with tab1:
 
 # --- TAB 2: PRACTICAL SEARCH ---
 with tab2:
-    st.header("Search Practical Papers (Paper 2 & Paper 4)")
+    st.subheader("Search Practical Papers (Paper 2 & Paper 4)")
     st.caption("Variants: Paper 2 (02) | Paper 4 (04)")
     keyword_t2 = st.text_input("Enter Practical Keywords (e.g., 'Mail Merge', 'JavaScript', 'Vector Graphics')", key="t2_kw")
 
@@ -413,7 +405,7 @@ with tab2:
 
 # --- TAB 3: HANDOUT BASKET ---
 with tab3:
-    st.header("Worksheet / Handout Builder")
+    st.subheader("Worksheet / Handout Builder")
     if st.session_state.handout_basket:
         st.subheader(f"Selected Question/Answer Pages: {len(st.session_state.handout_basket)}")
 
@@ -445,7 +437,7 @@ with tab3:
 
 # --- TAB 4: SOURCE FILES ---
 with tab4:
-    st.header("Download Practical Source Files (ZIP)")
+    st.subheader("Download Practical Source Files (ZIP)")
     c1, c2, c3 = st.columns(3)
     with c1:
         z_year = st.selectbox("Select Year", [str(y) for y in range(2026, 2018, -1)])
@@ -473,7 +465,6 @@ with tab4:
     else:
         st.warning(f"Source file `{expected_zip_name}` is not available locally in `{LOCAL_FOLDERS['zips']}`. Use the Admin Sync button to pull newly uploaded files from Drive.")
 
-
 # --- TAB 5: ADMIN PANEL ---
 with tab5:
     st.header("🔒 Admin Panel")
@@ -498,28 +489,27 @@ with tab5:
 
             # 1. BUTTON: THEORY FOLDER
             with col1:
-                st.markdown("### 📄 Theory Papers")
+                st.subheader(" 📄 Theory PYP")
                 st.caption("Target Component: Papers 1 & 3")
                 theory_drive_url = f"https://drive.google.com/drive/folders/{FOLDER_IDS['theory']}"
                 st.link_button("📂 Open Theory Folder", theory_drive_url, type="primary", use_container_width=True)
 
             # 2. BUTTON: PRACTICAL FOLDER
             with col2:
-                st.markdown("### 💻 Practical Papers")
+                st.subheader(" 💻 Practical PYP")
                 st.caption("Target Component: Papers 2 & 4")
                 practical_drive_url = f"https://drive.google.com/drive/folders/{FOLDER_IDS['practical']}"
                 st.link_button("📂 Open Practical Folder", practical_drive_url, type="primary", use_container_width=True)
 
             # 3. BUTTON: SOURCE FILES FOLDER
             with col3:
-                st.markdown("### 📦 Source Files")
+                st.subheader(" 📦 Source Files")
                 st.caption("Target Component: ZIP Archives")
                 zips_drive_url = f"https://drive.google.com/drive/folders/{FOLDER_IDS['zips']}"
                 st.link_button("📂 Open Source Files Folder", zips_drive_url, type="primary", use_container_width=True)
 
             st.markdown("---")
             st.info("💡 **Next Step after uploading:** Once you have added or updated files in Google Drive, use the **'Sync All Files from Google Drive'** button in the left sidebar to update the local portal cache.")
-
 
 # ==========================================
 # 7. FOOTER
