@@ -1,526 +1,318 @@
-# ********** This script containing the use of Service account ID and the JSON KEY in TOML ********
-import io
 import os
-import re
+import io
 import fitz  # PyMuPDF
 import streamlit as st
 from docx import Document
 from docx.shared import Inches, Pt
 from docx.enum.text import WD_ALIGN_PARAGRAPH
-from docx.oxml import OxmlElement
-from docx.oxml.ns import qn
-
-# Google API Libraries (Service Account)
 from google.oauth2.service_account import Credentials
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaIoBaseDownload
 
-# ==========================================
-# 1. CONFIGURATION & DRIVE FOLDER MAPPING
-# ==========================================
-SYLLABUS_CODE = "9626"
+# ==============================================================================
+# 1. PAGE CONFIGURATION & STYLING (Matching 9699 Sociology Palette)
+# ==============================================================================
+st.set_page_config(
+    page_title="9626 IT PYP Portal",
+    page_icon="💻",
+    layout="wide"
+)
 
-FOLDER_IDS = {
-    "theory": "1T1sIqRKxF5aO_r0sCyIVxidt0TyXOCcB",     # Theory Papers (P1 & P3)
-    "practical": "1EWBiwjvTc12LVtyNi2V9P9RSr8d2vgq7",  # Practical Papers (P2 & P4)
-    "zips": "1AsXq8TktyqajB7XTa9SQ5f85Pr6CQcFJ"          # Source Files (.zip)
+CUSTOM_CSS = """
+<style>
+    /* Main Background Color */
+    .stApp {
+        background-color: #63D0F8;
+    }
+    
+    /* Headers Styling */
+    h1, h2, h3 {
+        color: #0E2F56;
+        font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    }
+    
+    /* Card/Container Backgrounds */
+    div[data-testid="stVerticalBlock"] > div {
+        background-color: #FFFFFF;
+        padding: 15px;
+        border-radius: 10px;
+        box-shadow: 0px 4px 6px rgba(0, 0, 0, 0.1);
+    }
+    
+    /* Accent Buttons */
+    .stButton>button {
+        background-color: #CCFF00;
+        color: #0E2F56;
+        font-weight: bold;
+        border-radius: 8px;
+        border: none;
+        padding: 8px 16px;
+    }
+    .stButton>button:hover {
+        background-color: #B3E600;
+        color: #000000;
+    }
+</style>
+"""
+st.markdown(CUSTOM_CSS, unsafe_allow_html=True)
+
+# ==============================================================================
+# 2. LOCAL FOLDER & DRIVE CONFIGURATION
+# ==============================================================================
+PARENT_DIR = "9626ITMaterials"
+FOLDERS = {
+    "p1_it": os.path.join(PARENT_DIR, "p1_it"),
+    "p2_it": os.path.join(PARENT_DIR, "p2_it"),
+    "p3_it": os.path.join(PARENT_DIR, "p3_it"),
+    "p4_it": os.path.join(PARENT_DIR, "p4_it"),
+    "ms_p1_p2": os.path.join(PARENT_DIR, "ms_p1_p2"),
+    "ms_p3_p4": os.path.join(PARENT_DIR, "ms_p3_p4")
 }
 
-LOCAL_FOLDERS = {
-    "theory": "9626_theory",
-    "practical": "9626_practical",
-    "zips": "9626_zips"
-}
-
-# Safely create directories on server start
-for folder_path in LOCAL_FOLDERS.values():
+# Ensure local directories exist
+for folder_path in FOLDERS.values():
     os.makedirs(folder_path, exist_ok=True)
 
-# ==========================================
-# 2. GOOGLE DRIVE API & HELPER FUNCTIONS
-# ==========================================
-@st.cache_resource(show_spinner=False)
-def get_cached_drive_service():
-    """
-    Creates and caches the Google Drive API client using Service Account Secrets.
-    """
-    try:
-        if "gcp_service_account" not in st.secrets:
-            return None
+# Initialize Session State for PYP Cart
+if "cart" not in st.session_state:
+    st.session_state.cart = []
 
-        SCOPES = ['https://www.googleapis.com/auth/drive']
-        service_account_info = dict(st.secrets["gcp_service_account"])
-        
-        if "private_key" in service_account_info:
-            service_account_info["private_key"] = service_account_info["private_key"].replace("\\n", "\n")
-
+# ==============================================================================
+# 3. HELPER FUNCTIONS
+# ==============================================================================
+def get_drive_service():
+    """Authenticates and returns the Google Drive API service using Streamlit secrets."""
+    if "gcp_service_account" in st.secrets:
         creds = Credentials.from_service_account_info(
-            service_account_info, 
-            scopes=SCOPES
+            st.secrets["gcp_service_account"],
+            scopes=["https://www.googleapis.com/auth/drive.readonly"]
         )
         return build('drive', 'v3', credentials=creds)
-    except Exception as e:
-        st.error(f"❌ Service Account Auth Error: {e}")
-        return None
+    return None
 
-def sync_drive_folder_to_local(folder_key: str) -> tuple[int, str]:
-    """Downloads missing files from Google Drive to local directories."""
-    try:
-        service = get_cached_drive_service()
-        if not service:
-            return 0, "Drive authentication uninitialized or missing secrets."
+def sync_folder_from_drive(drive_folder_id, local_folder_path):
+    """Syncs files from a Google Drive folder to a local directory."""
+    service = get_drive_service()
+    if not service or not drive_folder_id:
+        return 0
+    
+    query = f"'{drive_folder_id}' in parents and trashed = false"
+    results = service.files().list(q=query, fields="files(id, name)").execute()
+    files = results.get('files', [])
+    
+    downloaded_count = 0
+    for file in files:
+        file_path = os.path.join(local_folder_path, file['name'])
+        if not os.path.exists(file_path):
+            request = service.files().get_media(fileId=file['id'])
+            with open(file_path, 'wb') as f:
+                downloader = MediaIoBaseDownload(f, request)
+                done = False
+                while not done:
+                    _, done = downloader.next_chunk()
+            downloaded_count += 1
+    return downloaded_count
 
-        drive_folder_id = FOLDER_IDS[folder_key]
-        local_path = LOCAL_FOLDERS[folder_key]
-
-        query = f"'{drive_folder_id}' in parents and trashed = false"
-        results = service.files().list(q=query, fields="files(id, name, mimeType)").execute()
-        drive_files = results.get('files', [])
-
-        downloaded_count = 0
-        for file_info in drive_files:
-            file_name = file_info['name']
-            file_id = file_info['id']
-            local_file_path = os.path.join(local_path, file_name)
-
-            if not os.path.exists(local_file_path):
-                request = service.files().get_media(fileId=file_id)
-                with open(local_file_path, "wb") as f:
-                    downloader = MediaIoBaseDownload(f, request)
-                    done = False
-                    while not done:
-                        _, done = downloader.next_chunk()
-                downloaded_count += 1
-
-        return downloaded_count, f"Synced {downloaded_count} new file(s) for `{folder_key}`."
-    except Exception as e:
-        return 0, f"Sync error on `{folder_key}`: {e}"
-
-# ==========================================
-# 3. SEARCH & RENDERING ENGINE
-# ==========================================
-def search_pdfs(keyword_list, folder_path, allowed_variants):
+def search_pdf_keywords(folder_path, keyword):
+    """Searches for a keyword across all PDFs in a specified folder."""
     results = []
-    if not os.path.exists(folder_path):
+    if not os.path.exists(folder_path) or not keyword:
         return results
-
-    cleaned_keywords = [k.strip().lower() for k in keyword_list if k.strip()]
-    if not cleaned_keywords:
-        return results
-
-    for file in os.listdir(folder_path):
-        if file.endswith(".pdf"):
-            base_name = os.path.splitext(file)[0]
-            if not any(base_name.endswith(f"_{variant}") for variant in allowed_variants):
-                continue
-
-            filepath = os.path.join(folder_path, file)
+    
+    for filename in sorted(os.listdir(folder_path)):
+        if filename.endswith(".pdf"):
+            pdf_path = os.path.join(folder_path, filename)
             try:
-                doc = fitz.open(filepath)
+                doc = fitz.open(pdf_path)
                 for page_num in range(len(doc)):
-                    page_text = doc[page_num].get_text()
-                    matches_all = True
-                    for kw in cleaned_keywords:
-                        escaped_kw = re.escape(kw)
-                        pattern = r'\b' + escaped_kw + r'(s|es)?\b'
-                        if not re.search(pattern, page_text, re.IGNORECASE) and kw not in page_text.lower():
-                            matches_all = False
-                            break
-                    if matches_all:
+                    text = doc[page_num].get_text("text")
+                    if keyword.lower() in text.lower():
                         results.append({
-                            "file": file,
-                            "page": page_num,
-                            "path": filepath,
-                            "type": "QP" if "_qp_" in file else "MS"
+                            "file_name": filename,
+                            "page_num": page_num + 1,
+                            "pdf_path": pdf_path
                         })
                 doc.close()
-            except Exception:
-                continue
+            except Exception as e:
+                st.error(f"Error reading {filename}: {e}")
     return results
 
-def render_pdf_page_image(file_path: str, page_num: int) -> bytes:
-    pdf_doc = fitz.open(file_path)
-    page = pdf_doc.load_page(page_num)
-    pix = page.get_pixmap(matrix=fitz.Matrix(2, 2))
-    img_bytes = pix.tobytes("png")
-    pdf_doc.close()
-    return img_bytes
+def render_pdf_page_as_image(pdf_path, page_num, zoom=2.0):
+    """Renders a specific PDF page as an image bytes object."""
+    doc = fitz.open(pdf_path)
+    page = doc.load_page(page_num - 1)
+    mat = fitz.Matrix(zoom, zoom)
+    pix = page.get_pixmap(matrix=mat)
+    img_data = pix.tobytes("png")
+    doc.close()
+    return img_data
 
-# ==========================================
-# 4. WORD DOCUMENT HANDOUT BUILDER
-# ==========================================
-def add_page_number_to_header(run):
-    fldChar1 = OxmlElement('w:fldChar')
-    fldChar1.set(qn('w:fldCharType'), 'begin')
-    instrText = OxmlElement('w:instrText')
-    instrText.set(qn('xml:space'), 'preserve')
-    instrText.text = "PAGE"
-    fldChar2 = OxmlElement('w:fldChar')
-    fldChar2.set(qn('w:fldCharType'), 'separate')
-    fldChar3 = OxmlElement('w:fldChar')
-    fldChar3.set(qn('w:fldCharType'), 'end')
-
-    r = run._r
-    r.append(fldChar1)
-    r.append(instrText)
-    r.append(fldChar2)
-    r.append(fldChar3)
-
-def create_custom_word_handout(basket_items, syllabus_code):
+def generate_word_worksheet(cart_items):
+    """Generates a Word Document (.docx) containing selected PYP pages."""
     doc = Document()
-    for section in doc.sections:
-        section.page_width = Inches(8.5)
-        section.page_height = Inches(11.5)
-        section.top_margin = Inches(0.5)
-        section.bottom_margin = Inches(0.3)
-        section.left_margin = Inches(0.4)
-        section.right_margin = Inches(0.4)
-
-        header = section.header
-        header_para = header.paragraphs[0]
-        header_para.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    
+    # Header Title
+    title = doc.add_heading('9626 Information Technology Worksheet', level=0)
+    title.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    
+    for idx, item in enumerate(cart_items, start=1):
+        doc.add_heading(f"Question {idx}: {item['file_name']} (Page {item['page_num']})", level=2)
         
-        header_run = header_para.add_run("Page ")
-        header_run.font.name = "Arial"
-        header_run.font.size = Pt(10)
-        add_page_number_to_header(header_run)
+        # Render image of the page
+        img_bytes = render_pdf_page_as_image(item['pdf_path'], item['page_num'], zoom=1.5)
+        image_stream = io.BytesIO(img_bytes)
+        doc.add_picture(image_stream, width=Inches(6.0))
+        doc.add_page_break()
+        
+    doc_io = io.BytesIO()
+    doc.save(doc_io)
+    doc_io.seek(0)
+    return doc_io
 
-    title_p = doc.add_paragraph()
-    title_p.alignment = WD_ALIGN_PARAGRAPH.CENTER
-    title_run = title_p.add_run(f'PTES {syllabus_code} IT Handout Worksheets')
-    title_run.font.bold = True
-    title_run.font.size = Pt(14)
+# ==============================================================================
+# 4. MAIN USER INTERFACE
+# ==============================================================================
+st.title("💻 9626 Information Technology PYP Portal")
+st.write("Welcome to the **A-Level 9626 IT** Past Year Paper portal. Search topics, view mark schemes, and build custom worksheets.")
 
-    for idx, item in enumerate(basket_items):
-        h = doc.add_heading(f"Source: {item['file']} (Page {item['page'] + 1})", level=2)
-        h.paragraph_format.space_before = Pt(4)
-        h.paragraph_format.space_after = Pt(4)
-
-        img_data = io.BytesIO(render_pdf_page_image(item['path'], item['page']))
-        doc.add_picture(img_data, width=Inches(6.5))
-
-        if idx < len(basket_items) - 1:
-            doc.add_page_break()
-
-    return doc
-
-# ==========================================
-# 5. STREAMLIT UI LAYOUT & STYLING
-# ==========================================
-st.set_page_config(page_title="9626 IT Resource Platform", layout="wide")
-
-MAIN_BG_COLOR = "#f9f0ee"
-SIDEBAR_BG_COLOR = "#FFFDD0"
-INPUT_BG_COLOR = "#FA8FEB"
-INPUT_BORDER_COLOR = "#1A1A1A"
-
-st.markdown(
-    f"""
-    <style>
-    .stAppViewContainer {{ background-color: {MAIN_BG_COLOR} !important; }}
-    .stHeader {{ background-color: {MAIN_BG_COLOR} !important; }}
-    [data-testid="stSidebar"] {{ background-color: {SIDEBAR_BG_COLOR} !important; }}
-    
-    div[data-baseweb="input"], div[data-baseweb="base-input"],
-    .stTextInput input, .stPasswordInput input {{
-        background-color: {INPUT_BG_COLOR} !important;
-        border: 2px solid {INPUT_BORDER_COLOR} !important;
-        border-radius: 8px !important;
-        color: #000000 !important;
-        font-weight: 600 !important;
-    }}
-    div[data-baseweb="input"] > input {{ background-color: transparent !important; }}
-    
-    .stSelectbox div[data-baseweb="select"], div[data-baseweb="select"] > div {{
-        background-color: {INPUT_BG_COLOR} !important;
-        border: 5px solid {INPUT_BORDER_COLOR} !important;
-        border-radius: 10px !important;
-    }}
-    .stSelectbox span, div[data-baseweb="select"] span {{ color: #6D3761 !important; font-weight: 600 !important; }}
-    .stSelectbox svg, div[data-baseweb="select"] svg {{ fill: #6D3761 !important; }}
-    .stExpander {{ background-color: #ffffff; border-radius: 10px; border: 1px solid #e0e0e0; margin-bottom: 8px; }}
-    </style>
-    """,
-    unsafe_allow_html=True
-)
-
-# ==========================================
-# 6. STATE INITIALIZATION & SAFE AUTO-SYNC
-# ==========================================
-if 'handout_basket' not in st.session_state:
-    st.session_state.handout_basket = []
-if 'theory_results' not in st.session_state:
-    st.session_state.theory_results = []
-if 'practical_results' not in st.session_state:
-    st.session_state.practical_results = []
-if 'manual_sync_message' not in st.session_state:
-    st.session_state.manual_sync_message = None
-
-if 'has_auto_synced' not in st.session_state:
-    st.session_state.has_auto_synced = True
-    try:
-        total_auto_synced = 0
-        for f_key in ["theory", "practical", "zips"]:
-            count, _ = sync_drive_folder_to_local(f_key)
-            total_auto_synced += count
-        if total_auto_synced > 0:
-            st.toast(f"🔄 Auto-Sync Complete: Downloaded {total_auto_synced} new file(s)!")
-    except Exception as e:
-        st.warning(f"Auto-sync on startup skipped: {e}")
-
-st.title("BRUNEI FORM SIXTH CENTRE")
-st.subheader("💻 9626 Information Technology PYP Resources")
-
-# Check for secrets configuration warning
-try:
-    if "gcp_service_account" not in st.secrets:
-        st.warning("⚠️ `gcp_service_account` configuration missing in Streamlit secrets. Google Drive sync functions will be unavailable until added.")
-except Exception:
-    st.warning("⚠️ Streamlit Secrets are not currently accessible.")
-
-# ==========================================
-# SIDEBAR
-# ==========================================
-with st.sidebar:
-    st.header("🛒 Handout Basket Summary")
-    st.metric(label="Saved Pages in Basket", value=len(st.session_state.handout_basket))
-    
-    if st.button("🗑️ Clear Basket", key="sb_clear_basket"):
-        st.session_state.handout_basket = []
-        st.rerun()
-
-    st.markdown("---")
-    st.header("🔄 Google Drive Sync")
-    st.caption("Sync locally mirrored files with Google Drive.")
-    
-    if st.button("🔄 Sync All Files from Google Drive", type="primary", key="sb_sync_btn"):
-        with st.spinner("Scanning Google Drive folders and downloading new files..."):
-            total_synced = 0
-            for f_key in ["theory", "practical", "zips"]:
-                count, msg = sync_drive_folder_to_local(f_key)
-                total_synced += count
-            
-            if total_synced > 0:
-                st.session_state.manual_sync_message = f"✅ Success! Synced {total_synced} new file(s) from Google Drive."
-            else:
-                st.session_state.manual_sync_message = "✅ All local files are already fully up to date with Google Drive!"
-
-    if st.session_state.manual_sync_message:
-        st.success(st.session_state.manual_sync_message)
-
-# Navigation Tabs
-tab1, tab2, tab3, tab4, tab5 = st.tabs([
-    "🔍 Theory Search(P1&P3)", 
-    "⚙️ Practical Search(P2&P4)", 
-    "🛒 Handout Cart", 
-    "📦 Source Files(ZIP)", 
-    "🔒 Admin Panel"
+tabs = st.tabs([
+    "📘 AS Level IT (P1 & P2)", 
+    "📙 A Level IT (P3 & P4)", 
+    "🛒 PYP Cart & Worksheet Builder", 
+    "🔍 Mark Scheme Search", 
+    "⚙️ Admin & Sync"
 ])
 
-# --- TAB 1: THEORY SEARCH ---
-with tab1:
-    st.subheader("Search Theory Papers (Paper 1 & Paper 3)")
-    st.caption("Variants: Paper 1 (11, 12, 13) | Paper 3 (31, 32, 33)")
-    keyword_t1 = st.text_input("Enter Theory Keywords (e.g., 'Normalized', 'Relational Database', 'CSS')", key="t1_kw")
+# ------------------------------------------------------------------------------
+# TAB 1: AS LEVEL IT
+# ------------------------------------------------------------------------------
+with tabs[0]:
+    st.header("AS Level Information Technology")
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        st.subheader("Paper 1: Theory")
+        p1_keyword = st.text_input("Search P1 Topics (e.g., Data, Database, Network):", key="p1_search")
+        if st.button("Search Paper 1", key="btn_p1"):
+            results = search_pdf_keywords(FOLDERS["p1_it"], p1_keyword)
+            st.write(f"Found **{len(results)}** match(es).")
+            for res in results:
+                st.write(f"📄 **{res['file_name']}** - Page {res['page_num']}")
+                img = render_pdf_page_as_image(res['pdf_path'], res['page_num'])
+                st.image(img, use_container_width=True)
+                if st.button(f"Add {res['file_name']} (P.{res['page_num']}) to Cart", key=f"add_p1_{res['file_name']}_{res['page_num']}"):
+                    st.session_state.cart.append(res)
+                    st.success("Added to cart!")
 
-    if st.button("Search Theory Papers", type="primary"):
-        if keyword_t1:
-            with st.spinner("Scanning Theory PDFs..."):
-                keywords = [k.strip() for k in keyword_t1.split(",") if k.strip()]
-                theory_variants = ["11", "12", "13", "31", "32", "33"]
-                st.session_state.theory_results = search_pdfs(keywords, LOCAL_FOLDERS["theory"], theory_variants)
-        else:
-            st.warning("Please enter a keyword.")
+    with col2:
+        st.subheader("Paper 2: Practical")
+        p2_keyword = st.text_input("Search P2 Topics (e.g., Spreadsheets, Database, Sound):", key="p2_search")
+        if st.button("Search Paper 2", key="btn_p2"):
+            results = search_pdf_keywords(FOLDERS["p2_it"], p2_keyword)
+            st.write(f"Found **{len(results)}** match(es).")
+            for res in results:
+                st.write(f"📄 **{res['file_name']}** - Page {res['page_num']}")
+                img = render_pdf_page_as_image(res['pdf_path'], res['page_num'])
+                st.image(img, use_container_width=True)
+                if st.button(f"Add {res['file_name']} (P.{res['page_num']}) to Cart", key=f"add_p2_{res['file_name']}_{res['page_num']}"):
+                    st.session_state.cart.append(res)
+                    st.success("Added to cart!")
 
-    if st.session_state.theory_results:
-        st.write(f"Found **{len(st.session_state.theory_results)}** matching pages:")
-        for idx, item in enumerate(st.session_state.theory_results):
-            doc_kind = "📝 Question Paper" if item["type"] == "QP" else "🔑 Marking Scheme"
-            label = f"📄 {item['file']} | {doc_kind} | Page {item['page'] + 1}"
+# ------------------------------------------------------------------------------
+# TAB 2: A LEVEL IT
+# ------------------------------------------------------------------------------
+with tabs[1]:
+    st.header("A Level Information Technology")
+    col3, col4 = st.columns(2)
+    
+    with col3:
+        st.subheader("Paper 3: Advanced Theory")
+        p3_keyword = st.text_input("Search P3 Topics (e.g., Project Management, JavaScript, Encryption):", key="p3_search")
+        if st.button("Search Paper 3", key="btn_p3"):
+            results = search_pdf_keywords(FOLDERS["p3_it"], p3_keyword)
+            st.write(f"Found **{len(results)}** match(es).")
+            for res in results:
+                st.write(f"📄 **{res['file_name']}** - Page {res['page_num']}")
+                img = render_pdf_page_as_image(res['pdf_path'], res['page_num'])
+                st.image(img, use_container_width=True)
+                if st.button(f"Add {res['file_name']} (P.{res['page_num']}) to Cart", key=f"add_p3_{res['file_name']}_{res['page_num']}"):
+                    st.session_state.cart.append(res)
+                    st.success("Added to cart!")
+
+    with col4:
+        st.subheader("Paper 4: Advanced Practical")
+        p4_keyword = st.text_input("Search P4 Topics (e.g., Vector Graphics, Animation, Web Authoring):", key="p4_search")
+        if st.button("Search Paper 4", key="btn_p4"):
+            results = search_pdf_keywords(FOLDERS["p4_it"], p4_keyword)
+            st.write(f"Found **{len(results)}** match(es).")
+            for res in results:
+                st.write(f"📄 **{res['file_name']}** - Page {res['page_num']}")
+                img = render_pdf_page_as_image(res['pdf_path'], res['page_num'])
+                st.image(img, use_container_width=True)
+                if st.button(f"Add {res['file_name']} (P.{res['page_num']}) to Cart", key=f"add_p4_{res['file_name']}_{res['page_num']}"):
+                    st.session_state.cart.append(res)
+                    st.success("Added to cart!")
+
+# ------------------------------------------------------------------------------
+# TAB 3: PYP CART & WORKSHEET BUILDER
+# ------------------------------------------------------------------------------
+with tabs[2]:
+    st.header("🛒 Selected Questions Cart")
+    
+    if not st.session_state.cart:
+        st.info("Your cart is currently empty. Search papers and add questions to build a worksheet.")
+    else:
+        st.write(f"Total questions selected: **{len(st.session_state.cart)}**")
+        
+        if st.button("Clear Cart"):
+            st.session_state.cart = []
+            st.rerun()
             
-            with st.expander(label):
-                col_img, col_actions = st.columns([3, 1])
-                with col_img:
-                    img_data = render_pdf_page_image(item['path'], item['page'])
-                    st.image(img_data, use_container_width=True)
-                with col_actions:
-                    st.write("### Actions")
-                    if st.button("➕ Add to Basket", key=f"add_t1_{idx}", type="primary"):
-                        st.session_state.handout_basket.append(item)
-                        st.toast(f"Added {item['file']} (P.{item['page']+1}) to basket!")
-                        st.rerun()
-                    st.markdown("---")
-                    with open(item['path'], "rb") as pdf_f:
-                        st.download_button(
-                            label="📥 Download Full PDF",
-                            data=pdf_f.read(),
-                            file_name=item['file'],
-                            mime="application/pdf",
-                            key=f"dl_t1_{idx}"
-                        )
+        for i, item in enumerate(st.session_state.cart):
+            st.write(f"**Item {i+1}:** {item['file_name']} (Page {item['page_num']})")
+        
+        # Download Word Worksheet
+        doc_file = generate_word_worksheet(st.session_state.cart)
+        st.download_button(
+            label="📄 Export Worksheet as Word Document (.docx)",
+            data=doc_file,
+            file_name="9626_IT_Custom_Worksheet.docx",
+            mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+        )
 
+# ------------------------------------------------------------------------------
+# TAB 4: MARK SCHEME SEARCH
+# ------------------------------------------------------------------------------
+with tabs[3]:
+    st.header("🔍 Mark Scheme Search")
+    ms_choice = st.radio("Select Level:", ["AS Level (P1 & P2 MS)", "A Level (P3 & P4 MS)"])
+    ms_keyword = st.text_input("Enter Mark Scheme Keyword/Term:", key="ms_search")
+    
+    if st.button("Search Mark Schemes", key="btn_ms"):
+        target_folder = FOLDERS["ms_p1_p2"] if "AS Level" in ms_choice else FOLDERS["ms_p3_p4"]
+        results = search_pdf_keywords(target_folder, ms_keyword)
+        st.write(f"Found **{len(results)}** match(es).")
+        for res in results:
+            st.write(f"📝 **{res['file_name']}** - Page {res['page_num']}")
+            img = render_pdf_page_as_image(res['pdf_path'], res['page_num'])
+            st.image(img, use_container_width=True)
 
-# --- TAB 2: PRACTICAL SEARCH ---
-with tab2:
-    st.subheader("Search Practical Papers (Paper 2 & Paper 4)")
-    st.caption("Variants: Paper 2 (02) | Paper 4 (04)")
-    keyword_t2 = st.text_input("Enter Practical Keywords (e.g., 'Mail Merge', 'JavaScript', 'Vector Graphics')", key="t2_kw")
-
-    if st.button("Search Practical Papers", type="primary"):
-        if keyword_t2:
-            with st.spinner("Scanning Practical PDFs..."):
-                keywords = [k.strip() for k in keyword_t2.split(",") if k.strip()]
-                practical_variants = ["02", "04"]
-                st.session_state.practical_results = search_pdfs(keywords, LOCAL_FOLDERS["practical"], practical_variants)
+# ------------------------------------------------------------------------------
+# TAB 5: ADMIN & DRIVE SYNC
+# ------------------------------------------------------------------------------
+with tabs[4]:
+    st.header("⚙️ Admin Dashboard & Google Drive Sync")
+    st.write("Sync your local folder structure with Google Drive cloud storage.")
+    
+    if st.button("Sync All Folders from Google Drive"):
+        if "gdrive_folders" in st.secrets:
+            total_synced = 0
+            for key, folder_path in FOLDERS.items():
+                drive_id = st.secrets["gdrive_folders"].get(key)
+                if drive_id:
+                    count = sync_folder_from_drive(drive_id, folder_path)
+                    st.write(f"Synced `{key}`: **{count}** new file(s) downloaded.")
+                    total_synced += count
+            st.success(f"Sync complete! Total new files downloaded: {total_synced}")
         else:
-            st.warning("Please enter a keyword.")
-
-    if st.session_state.practical_results:
-        st.write(f"Found **{len(st.session_state.practical_results)}** matching pages:")
-        for idx, item in enumerate(st.session_state.practical_results):
-            doc_kind = "📝 Question Paper" if item["type"] == "QP" else "🔑 Marking Scheme"
-            label = f"📄 {item['file']} | {doc_kind} | Page {item['page'] + 1}"
-            
-            with st.expander(label):
-                col_img, col_actions = st.columns([3, 1])
-                with col_img:
-                    img_data = render_pdf_page_image(item['path'], item['page'])
-                    st.image(img_data, use_container_width=True)
-                with col_actions:
-                    st.write("### Actions")
-                    if st.button("➕ Add to Basket", key=f"add_t2_{idx}", type="primary"):
-                        st.session_state.handout_basket.append(item)
-                        st.toast(f"Added {item['file']} (P.{item['page']+1}) to basket!")
-                        st.rerun()
-                    st.markdown("---")
-                    with open(item['path'], "rb") as pdf_f:
-                        st.download_button(
-                            label="📥 Download Full PDF",
-                            data=pdf_f.read(),
-                            file_name=item['file'],
-                            mime="application/pdf",
-                            key=f"dl_t2_{idx}"
-                        )
-
-
-# --- TAB 3: HANDOUT BASKET ---
-with tab3:
-    st.subheader("Worksheet / Handout Builder")
-    if st.session_state.handout_basket:
-        st.subheader(f"Selected Question/Answer Pages: {len(st.session_state.handout_basket)}")
-
-        for idx, item in enumerate(list(st.session_state.handout_basket)):
-            c1, c2 = st.columns([4, 1])
-            c1.write(f"{idx+1}. **{item['file']}** (Page {item['page'] + 1})")
-            if c2.button("❌ Remove", key=f"remove_basket_{idx}"):
-                st.session_state.handout_basket.pop(idx)
-                st.rerun()
-
-        st.markdown("---")
-        if st.button("🪄 Export Handout to Word Document", type="primary"):
-            with st.spinner("Building custom Word document..."):
-                doc = create_custom_word_handout(st.session_state.handout_basket, SYLLABUS_CODE)
-                target_filename = f"{SYLLABUS_CODE}_IT_Handout.docx"
-                doc_buffer = io.BytesIO()
-                doc.save(doc_buffer)
-                doc_buffer.seek(0)
-
-                st.download_button(
-                    label="📥 Click for final Download to Local Drive",
-                    data=doc_buffer,
-                    file_name=target_filename,
-                    mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-                )
-    else:
-        st.info("Your basket is empty. Add pages from Tab 1 or Tab 2.")
-
-
-# --- TAB 4: SOURCE FILES ---
-with tab4:
-    st.subheader("Download Practical Source Files (ZIP)")
-    c1, c2, c3 = st.columns(3)
-    with c1:
-        z_year = st.selectbox("Select Year", [str(y) for y in range(2026, 2018, -1)])
-    with c2:
-        z_session = st.selectbox("Select Session", ["March (m)", "June (s)", "Nov (w)"])
-        session_code = z_session.split("(")[1].replace(")", "")
-    with c3:
-        z_paper = st.selectbox("Select Paper Component", ["02 (Paper 2)", "04 (Paper 4)"])
-        paper_code = z_paper.split()[0]
-
-    short_year = z_year[-2:]
-    expected_zip_name = f"9626_{session_code}{short_year}_sf_{paper_code}.zip"
-    zip_path = os.path.join(LOCAL_FOLDERS["zips"], expected_zip_name)
-
-    st.markdown("---")
-    if os.path.exists(zip_path):
-        st.success(f"Found Source File: `{expected_zip_name}`")
-        with open(zip_path, "rb") as zf:
-            st.download_button(
-                label=f"📦 Download {expected_zip_name}",
-                data=zf,
-                file_name=expected_zip_name,
-                mime="application/zip"
-            )
-    else:
-        st.warning(f"Source file `{expected_zip_name}` is not available locally in `{LOCAL_FOLDERS['zips']}`. Use the Admin Sync button to pull newly uploaded files from Drive.")
-
-# --- TAB 5: ADMIN PANEL ---
-with tab5:
-    st.header("🔒 Admin Panel")
-
-    try:
-        admin_password = st.secrets.get("ADMIN_PASSWORD")
-    except Exception:
-        admin_password = None
-
-    if not admin_password:
-        st.error("🚨 `ADMIN_PASSWORD` is not configured in your Streamlit Secrets.")
-    else:
-        pwd = st.text_input("Enter Your Admin Password", type="password")
-
-        if pwd == admin_password:
-            st.success("🔓 Admin Access Granted")
-            st.markdown("---")
-            st.subheader("📁 Quick Access to Google Drive Folders")
-            st.caption("Click any button below to open the corresponding Google Drive folder in a new tab. You can upload files directly in bulk from Google Drive!")
-
-            col1, col2, col3 = st.columns(3)
-
-            # 1. BUTTON: THEORY FOLDER
-            with col1:
-                st.subheader(" 📄 Theory PYP")
-                st.caption("Target Component: Papers 1 & 3")
-                theory_drive_url = f"https://drive.google.com/drive/folders/{FOLDER_IDS['theory']}"
-                st.link_button("📂 Open Theory Folder", theory_drive_url, type="primary", use_container_width=True)
-
-            # 2. BUTTON: PRACTICAL FOLDER
-            with col2:
-                st.subheader(" 💻 Practical PYP")
-                st.caption("Target Component: Papers 2 & 4")
-                practical_drive_url = f"https://drive.google.com/drive/folders/{FOLDER_IDS['practical']}"
-                st.link_button("📂 Open Practical Folder", practical_drive_url, type="primary", use_container_width=True)
-
-            # 3. BUTTON: SOURCE FILES FOLDER
-            with col3:
-                st.subheader(" 📦 Source Files")
-                st.caption("Target Component: ZIP Archives")
-                zips_drive_url = f"https://drive.google.com/drive/folders/{FOLDER_IDS['zips']}"
-                st.link_button("📂 Open Source Files Folder", zips_drive_url, type="primary", use_container_width=True)
-
-            st.markdown("---")
-            st.info("💡 **Next Step after uploading:** Once you have added or updated files in Google Drive, use the **'Sync All Files from Google Drive'** button in the left sidebar to update the local portal cache.")
-
-# ==========================================
-# 7. FOOTER
-# ==========================================
-st.markdown("---")
-st.markdown(
-    """
-    <div style="text-align: center; width: 100%;">
-        <p style="font-size: 20px; font-weight: bold; margin-bottom: 5px;">✨ Digital 9626 Information Technology Resource Portal ✨</p>
-        <p style="color: gray; font-size: 14px;">Developer: HNHaziqah @ HHartini Computer Science PTES</p>
-    </div>
-    """,
-    unsafe_allow_html=True
-)
+            st.error("Google Drive folder configuration missing in `.streamlit/secrets.toml`!")
