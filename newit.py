@@ -789,17 +789,17 @@ with tab7:
         with c1:
             st.link_button("📖 Upload Papers 1 & 3 (Theory)", drive_links.get("p1_p3", "https://drive.google.com"), use_container_width=True)
             st.markdown("<br>", unsafe_allow_html=True)
-            st.link_button("📦 Upkoad Practical Source Files (ZIP)", drive_links.get("zip_files", "https://drive.google.com"), use_container_width=True)
+            st.link_button("📦 Upkoad Practical ZIP Files", drive_links.get("zip_files", "https://drive.google.com"), use_container_width=True)
             
         with c2:
             st.link_button("💻 Upload Paper 2 (AS Practical)", drive_links.get("p2", "https://drive.google.com"), use_container_width=True)
             st.markdown("<br>", unsafe_allow_html=True)
-            st.link_button("🔑 Upload Mark Schemes (P1 & P3)", drive_links.get("ms_p1_p3", "https://drive.google.com"), use_container_width=True)
+            st.link_button("🔑 Upload Mark Schemes (P1/P3)", drive_links.get("ms_p1_p3", "https://drive.google.com"), use_container_width=True)
             
         with c3:
             st.link_button("⚙️ Upload Paper 4 (A Practical)", drive_links.get("p4", "https://drive.google.com"), use_container_width=True)
             st.markdown("<br>", unsafe_allow_html=True)
-            st.link_button("🔑 Upload Mark Schemes (P2 & P4)", drive_links.get("ms_p2_p4", "https://drive.google.com"), use_container_width=True)
+            st.link_button("🔑 Upload Mark Schemes (P2/P4)", drive_links.get("ms_p2_p4", "https://drive.google.com"), use_container_width=True)
 
     elif pwd_input:
         st.error("Incorrect Admin Password.")
