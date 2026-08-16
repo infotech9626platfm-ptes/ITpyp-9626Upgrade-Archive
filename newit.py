@@ -553,6 +553,7 @@ with tab4:
     else:
         st.info("🛒 Your Cart is empty! Search the Theory or Practical tabs and click '➕ Add to Cart' to start building your handout.")
 
+##############################################################################################
 # --- TAB 5: PRACTICAL SOURCE FILES (ZIP FILES) ---
 with tab5:
     st.subheader("📦 Practical Source Files Repository (Paper 2 & Paper 4 ZIPs)")
@@ -560,32 +561,81 @@ with tab5:
 
     zip_folder_path = LOCAL_FOLDERS["zip_files"]
     
-    col_zip_paper, col_zip_search = st.columns([1, 2])
-    with col_zip_paper:
+    # --- STRUCTURED PARAMETER INPUT BAR ---
+    col_level, col_y, col_m, col_v = st.columns([2, 1, 1.5, 1.5])
+    
+    with col_level:
         target_zip_paper = st.selectbox(
-            "Filter Paper Component:", 
+            "Select Qualification Level:", 
             ["All Practical Papers", "Paper 2 (AS)", "Paper 4 (A Level)"],
             key="zip_paper_filter"
         )
-    with col_zip_search:
-        zip_query = st.text_input("Filter ZIP Files by Name or Session", placeholder="e.g. 2021, s21, w22, 9626_s22_sf_02", key="zip_query")
+
+    with col_y:
+        zip_year = st.text_input(
+            "Year (YYYY)", 
+            value="2021", 
+            placeholder="e.g. 2021", 
+            key="zip_year_input"
+        )
+
+    with col_m:
+        zip_month = st.selectbox(
+            "Select Session", 
+            [" June (s) ", " November (w) ", " March (m) "], 
+            key="zip_mth_select"
+        )
+        if "June" in zip_month:
+            zip_month_code = "s"
+        elif "November" in zip_month:
+            zip_month_code = "w"
+        else:
+            zip_month_code = "m"
+            
+    with col_v:
+        # Auto-default variant based on paper selection, or allow manual pick
+        default_var_index = 1 if "Paper 4" in target_zip_paper else 0
+        zip_variant = st.selectbox(
+            "Select Variant", 
+            ["02", "04"], 
+            index=default_var_index,
+            key="zip_var_select"
+        )
+
+    # Clean and extract 2-digit year tag (e.g., '2021' -> '21')
+    cleaned_zip_year = zip_year.strip()
+    short_zip_year = cleaned_zip_year[-2:] if len(cleaned_zip_year) >= 2 else cleaned_zip_year
+
+    # Constructed search identifiers
+    search_session_tag = f"{zip_month_code}{short_zip_year}"  # e.g., 's21' or 'm21'
+    search_sf_tag = f"sf_{zip_variant}"                      # e.g., 'sf_02' or 'sf_04'
+    expected_zip_pattern = f"{SYLLABUS_CODE}_{search_session_tag}_{search_sf_tag}.zip"
+
+    st.markdown("---")
 
     if os.path.exists(zip_folder_path):
-        all_zips = [f for f in os.listdir(zip_folder_path) if f.endswith(".zip") or f.endswith(".rar") or f.endswith(".7z")]
+        all_zips = [f for f in os.listdir(zip_folder_path) if f.endswith(('.zip', '.rar', '.7z'))]
         
-        # Filtering
-        filtered_zips = all_zips
-        if target_zip_paper == "Paper 2 (AS)":
-            filtered_zips = [f for f in filtered_zips if "_02" in f.lower() or "_2" in f.lower() or "p2" in f.lower()]
-        elif target_zip_paper == "Paper 4 (A Level)":
-            filtered_zips = [f for f in filtered_zips if "_04" in f.lower() or "_4" in f.lower() or "p4" in f.lower()]
+        filtered_zips = []
+        for z_file in all_zips:
+            z_lower = z_file.lower()
+            
+            # Match Level/Paper Filter
+            if target_zip_paper == "Paper 2 (AS)" and not ("_02" in z_lower or "_2" in z_lower or "p2" in z_lower):
+                continue
+            if target_zip_paper == "Paper 4 (A Level)" and not ("_04" in z_lower or "_4" in z_lower or "p4" in z_lower):
+                continue
 
-        if zip_query.strip():
-            filtered_zips = [f for f in filtered_zips if zip_query.lower() in f.lower()]
+            # Match Session (e.g., 's21') and Variant Tag (e.g., 'sf_02')
+            if search_session_tag in z_lower and search_sf_tag in z_lower:
+                filtered_zips.append(z_file)
+            # Fallback: match if year tag and variant are both present
+            elif search_session_tag in z_lower and zip_variant in z_lower:
+                if z_file not in filtered_zips:
+                    filtered_zips.append(z_file)
 
-        st.markdown("---")
         if filtered_zips:
-            st.success(f"Found **{len(filtered_zips)}** Practical Source File(s):")
+            st.success(f"Found **{len(filtered_zips)}** matching Practical Source File(s):")
             for z_file in sorted(filtered_zips):
                 c_name, c_btn = st.columns([3, 1])
                 full_z_path = os.path.join(zip_folder_path, z_file)
@@ -603,10 +653,11 @@ with tab5:
                             key=f"dl_zip_{z_file}"
                         )
         else:
-            st.warning("No ZIP files match your search criteria. Try syncing Google Drive.")
+            st.warning(f"No ZIP source file found matching session `{search_session_tag}` and variant `{zip_variant}` (Expected pattern: `{expected_zip_pattern}`).")
+            st.info("💡 **Tip**: Click **Sync Google Drive** from the sidebar to fetch newly uploaded source files.")
     else:
         st.warning("ZIP directory does not exist.")
-
+###############################################################################################
 # --- TAB 6: ANSWER SCHEMES ---
 with tab6:
     st.subheader("🔑 Download Marking Schemes")
