@@ -353,13 +353,13 @@ tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs([
     "⚙️ Practical P4", 
     "🛒 PYP Cart", 
     "📦 ZIP Source", 
-    "🔑 Mark_Schm", 
+    "🔑 Mark Scheme", 
     "🔒 Upload PYP"
 ])
 
 # --- TAB 1: THEORY PAPERS (PAPER 1 & PAPER 3) ---
 with tab1:
-    st.subheader("📖 Theory Papers Search (Paper 1 & Paper 3)")
+    st.subheader("📖 Theory Papers Search of Paper 1 and Paper 3")
     
     col_p, col_kw = st.columns([1, 2])
     with col_p:
@@ -416,7 +416,7 @@ with tab1:
 
 # --- TAB 2: AS PRACTICAL (PAPER 2) ---
 with tab2:
-    st.subheader("💻 AS Level Practical Search (Paper 2)")
+    st.subheader("💻 AS Level Practical Search of Paper 2")
     
     p2_kw = st.text_input(
         "Enter Keywords", 
@@ -459,7 +459,7 @@ with tab2:
 
 # --- TAB 3: A LEVEL PRACTICAL (PAPER 4) ---
 with tab3:
-    st.subheader("⚙️ A Level Practical Search (Paper 4)")
+    st.subheader("⚙️ A Level Practical Search of Paper 4")
     
     p4_kw = st.text_input(
         "Enter Keywords", 
@@ -502,7 +502,7 @@ with tab3:
 
 # --- TAB 4: PYP CART & WORKSHEET GENERATOR ---
 with tab4:
-    st.subheader("🛒 PYP Cart & Handout Generator")
+    st.subheader("🛒 Collection of PYP Merged pages Cart & Handout Generator")
     
     if len(st.session_state.handout_basket) > 0:
         st.info(f"### 📋 Selected Question Pages ({len(st.session_state.handout_basket)} items)")
@@ -557,7 +557,7 @@ with tab4:
 # --- TAB 5: PRACTICAL SOURCE FILES (ZIP FILES) ---
 with tab5:
     st.subheader("📦 Practical Source Files Repository (Paper 2 & Paper 4 ZIPs)")
-    st.caption("Search and download supporting practical files, data files, and assets.")
+   # st.caption("Search and download supporting practical files, data files, and assets.")
 
     zip_folder_path = LOCAL_FOLDERS["zip_files"]
     
@@ -660,7 +660,7 @@ with tab5:
 ###############################################################################################
 # --- TAB 6: ANSWER SCHEMES ---
 with tab6:
-    st.subheader("🔑 Download Marking Schemes")
+    st.subheader("🔑 Download the PYP Marking Schemes")
     
     col_paper, col_y, col_m, col_v = st.columns([2, 1, 1.5, 1.5])
     
@@ -770,14 +770,14 @@ with tab6:
 
 # --- TAB 7: ADMIN PANEL (6 GOOGLE DRIVE FOLDERS) ---
 with tab7:
-    st.subheader("🔒 Administrator Control Panel")
+    st.subheader("🔒 Administrator Control Panel & Upload PYP ")
     st.caption("Manage Google Drive repositories across all 6 subject partitions.")
 
     admin_pwd = st.secrets.get("ADMIN_PASSWORD", "")
     pwd_input = st.text_input("Enter Admin Password", type="password", key="admin_pwd_input")
 
     if pwd_input and pwd_input == admin_pwd:
-        st.success("Authenticated as Administrator")
+        st.success("Authorised Access as Administrator")
         st.markdown("---")
         
         st.markdown("### 🌐 Google Drive Web Repositories")
@@ -787,19 +787,19 @@ with tab7:
 
         c1, c2, c3 = st.columns(3)
         with c1:
-            st.link_button("📖 1. Papers 1 & 3 (Theory)", drive_links.get("p1_p3", "https://drive.google.com"), use_container_width=True)
+            st.link_button("📖 Upload Papers 1 & 3 (Theory)", drive_links.get("p1_p3", "https://drive.google.com"), use_container_width=True)
             st.markdown("<br>", unsafe_allow_html=True)
-            st.link_button("📦 4. Practical Source Files (ZIP)", drive_links.get("zip_files", "https://drive.google.com"), use_container_width=True)
+            st.link_button("📦 Upkoad Practical Source Files (ZIP)", drive_links.get("zip_files", "https://drive.google.com"), use_container_width=True)
             
         with c2:
-            st.link_button("💻 2. Paper 2 (AS Practical)", drive_links.get("p2", "https://drive.google.com"), use_container_width=True)
+            st.link_button("💻 Upload Paper 2 (AS Practical)", drive_links.get("p2", "https://drive.google.com"), use_container_width=True)
             st.markdown("<br>", unsafe_allow_html=True)
-            st.link_button("🔑 5. Answer Schemes (P1 & P3)", drive_links.get("ms_p1_p3", "https://drive.google.com"), use_container_width=True)
+            st.link_button("🔑 Upload Mark Schemes (P1 & P3)", drive_links.get("ms_p1_p3", "https://drive.google.com"), use_container_width=True)
             
         with c3:
-            st.link_button("⚙️ 3. Paper 4 (A Practical)", drive_links.get("p4", "https://drive.google.com"), use_container_width=True)
+            st.link_button("⚙️ Upload Paper 4 (A Practical)", drive_links.get("p4", "https://drive.google.com"), use_container_width=True)
             st.markdown("<br>", unsafe_allow_html=True)
-            st.link_button("🔑 6. Answer Schemes (P2 & P4)", drive_links.get("ms_p2_p4", "https://drive.google.com"), use_container_width=True)
+            st.link_button("🔑 Upload Mark Schemes (P2 & P4)", drive_links.get("ms_p2_p4", "https://drive.google.com"), use_container_width=True)
 
     elif pwd_input:
         st.error("Incorrect Admin Password.")
