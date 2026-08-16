@@ -22,12 +22,12 @@ from googleapiclient.http import MediaIoBaseDownload
 # 0. STREAMLIT PAGE CONFIG & CUSTOM STYLING
 # ==========================================
 st.set_page_config(
-    page_title="9626 Info Tech PYP Portal", 
+    page_title="9626 IT PYP Portal", 
     page_icon="💻",
     layout="wide"
 )
 
-# Custom Styling (Exact Sociology Dashboard Theme)
+# Custom Styling (Sociology Dashboard Theme)
 st.markdown("""
     <style>
     /* 1. Main Page Background */
@@ -81,7 +81,7 @@ st.markdown("""
     /* 6. Navigation Tab Labels */
     button[data-baseweb="tab"] p {
         font-weight: bold !important;
-        font-size: 1.8rem !important;
+        font-size: 1.2rem !important;
         color: #384403 !important;
     }
     
@@ -106,14 +106,14 @@ st.markdown("""
 SYLLABUS_CODE = "9626"
 SCOPES = ['https://www.googleapis.com/auth/drive.readonly']
 
-# 6 Primary Folders for 9626 IT (AS & A Level components)
+# 6 Local Folder Mappings
 LOCAL_FOLDERS = {
-    "p1_it": "paper1_it",
-    "p2_it": "paper2_it",
-    "p3_it": "paper3_it",
-    "p4_it": "paper4_it",
-    "ms_p1_p2": "marksch_P1P2",
-    "ms_p3_p4": "marksch_P3P4"
+    "p1_p3": "9626_Paper1n3",
+    "p2": "9626_Paper2",
+    "p4": "9626_Paper4",
+    "zip_files": "9626_ZipfilesP2n4",
+    "ms_p1_p3": "9626_ms_P1n3",
+    "ms_p2_p4": "9626_ms_P2n4"
 }
 
 for folder_path in LOCAL_FOLDERS.values():
@@ -277,7 +277,7 @@ def render_pdf_page_preview(filepath: str, page_num: int = 0):
         st.error(f"Unable to render page preview: {e}")
         return None
 
-def execute_pdf_search(folder_key: str, keyword_string: str) -> list[dict]:
+def execute_pdf_search(folder_key: str, keyword_string: str, paper_filter: str = None) -> list[dict]:
     """Searches PDF files in a specific folder for matching keywords."""
     results = []
     keywords = [k.strip().lower() for k in keyword_string.split(",") if k.strip()]
@@ -286,6 +286,9 @@ def execute_pdf_search(folder_key: str, keyword_string: str) -> list[dict]:
     if os.path.exists(folder_path):
         for file in os.listdir(folder_path):
             if file.endswith(".pdf"):
+                # Optional paper-specific filter (e.g., matching paper variant in filename)
+                if paper_filter and paper_filter not in file.lower():
+                    continue
                 filepath = os.path.join(folder_path, file)
                 try:
                     doc = fitz.open(filepath)
@@ -308,10 +311,12 @@ def execute_pdf_search(folder_key: str, keyword_string: str) -> list[dict]:
 if 'handout_basket' not in st.session_state:
     st.session_state.handout_basket = []
 
-if 'as_results' not in st.session_state:
-    st.session_state.as_results = []
-if 'a_results' not in st.session_state:
-    st.session_state.a_results = []
+if 'p1_p3_results' not in st.session_state:
+    st.session_state.p1_p3_results = []
+if 'p2_results' not in st.session_state:
+    st.session_state.p2_results = []
+if 'p4_results' not in st.session_state:
+    st.session_state.p4_results = []
 
 if 'has_auto_synced' not in st.session_state:
     st.session_state.has_auto_synced = True
@@ -341,42 +346,51 @@ with st.sidebar:
         st.session_state.handout_basket = []
         st.rerun()
 
-# --- NAVIGATION TABS ---
-tab1, tab2, tab3, tab4, tab5 = st.tabs([
-    "📚'AS' IT (P1 & P2)", 
-    "🌐'A' IT (P3 & P4)", 
+# --- NAVIGATION TABS (7 TABS TOTAL) ---
+tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs([
+    "📖 Theory (P1 & P3)", 
+    "💻 AS Practical (P2)", 
+    "⚙️ A Practical (P4)", 
     "🛒 PYP Cart", 
+    "📦 Source Files (ZIP)", 
     "🔑 Answer Schemes", 
-    "⚙️ Upload PYP"
+    "🔒 Admin Panel"
 ])
 
-# --- TAB 1: AS IT (PAPER 1 or PAPER 2) ---
+# --- TAB 1: THEORY PAPERS (PAPER 1 & PAPER 3) ---
 with tab1:
-    st.subheader("📚 Information Technology Search ('AS' Level Papers (P1/P2)")
+    st.subheader("📖 Theory Papers Search (Paper 1 & Paper 3)")
     
-    selected_as_paper = st.selectbox(
-        "Select Target Component Paper:", 
-        options=["p1_it", "p2_it"],
-        format_func=lambda x: "Paper 1 (Theory)" if x == "p1_it" else "Paper 2 (Practical)",
-        key="select_as_paper"
-    )
+    col_p, col_kw = st.columns([1, 2])
+    with col_p:
+        theory_paper = st.selectbox(
+            "Select Theory Component:", 
+            ["All Theory Papers", "Paper 1 (AS Theory)", "Paper 3 (A Level Theory)"],
+            key="select_theory_paper"
+        )
+    with col_kw:
+        p1_p3_kw = st.text_input(
+            "Enter Search Keywords", 
+            placeholder="e.g., Normalization, Database, Encryption, Network Topology", 
+            key="p1_p3_kw"
+        )
 
-    as_kw = st.text_input(
-        "Enter Keywords", 
-        placeholder="e.g., Database, Normalization, Spreadsheet, Network, Security, Hardware", 
-        key="as_kw"
-    )
-
-    if st.button("Search Keyword", key="btn_search_as"):
-        if as_kw.strip():
-            with st.spinner("Scanning IT PDFs..."):
-                st.session_state.as_results = execute_pdf_search(selected_as_paper, as_kw)
+    if st.button("Search Theory Papers", key="btn_search_p1_p3"):
+        if p1_p3_kw.strip():
+            filter_tag = None
+            if theory_paper == "Paper 1 (AS Theory)":
+                filter_tag = "_qp_1"
+            elif theory_paper == "Paper 3 (A Level Theory)":
+                filter_tag = "_qp_3"
+                
+            with st.spinner("Scanning Theory PDFs..."):
+                st.session_state.p1_p3_results = execute_pdf_search("p1_p3", p1_p3_kw, filter_tag)
         else:
-            st.warning("Please enter a keyword.")
+            st.warning("Please enter at least one keyword.")
 
-    if st.session_state.as_results:
-        st.write(f"Found **{len(st.session_state.as_results)}** matching page(s):")
-        for idx, item in enumerate(st.session_state.as_results):
+    if st.session_state.p1_p3_results:
+        st.write(f"Found **{len(st.session_state.p1_p3_results)}** matching page(s):")
+        for idx, item in enumerate(st.session_state.p1_p3_results):
             with st.expander(f"📄 {item['file']} | Page {item['page'] + 1}"):
                 c1, c2 = st.columns([3, 1])
                 with c1:
@@ -384,7 +398,7 @@ with tab1:
                     if preview_img:
                         st.image(preview_img, use_container_width=True)
                 with c2:
-                    if st.button("➕ Add to Cart", key=f"add_as_{idx}"):
+                    if st.button("➕ Add to Cart", key=f"add_p1_p3_{idx}"):
                         st.session_state.handout_basket.append(item)
                         st.toast(f"Added Page {item['page'] + 1} to cart!")
                         st.rerun()
@@ -397,36 +411,29 @@ with tab1:
                             data=pdf_f,
                             file_name=item["file"],
                             mime="application/pdf",
-                            key=f"dl_as_{idx}"
+                            key=f"dl_p1_p3_{idx}"
                         )
 
-# --- TAB 2: A LEVEL IT (PAPER 3 or PAPER 4) ---
+# --- TAB 2: AS PRACTICAL (PAPER 2) ---
 with tab2:
-    st.subheader("🌍 Information Technology Search ('A' Level Papers (P3/P4)")
+    st.subheader("💻 AS Level Practical Search (Paper 2)")
     
-    selected_a_paper = st.selectbox(
-        "Select Target Component Paper:", 
-        options=["p3_it", "p4_it"],
-        format_func=lambda x: "Paper 3 (Advanced Theory)" if x == "p3_it" else "Paper 4 (Advanced Practical)",
-        key="select_a_paper"
-    )
-
-    a_kw = st.text_input(
+    p2_kw = st.text_input(
         "Enter Keywords", 
-        placeholder="e.g., JavaScript, Sound Editing, Video Editing, Encryption, Project Management", 
-        key="a_kw"
+        placeholder="e.g., Spreadsheet, VLOOKUP, Database, Query, CSS, HTML", 
+        key="p2_kw"
     )
 
-    if st.button("Search Keyword", key="btn_search_a"):
-        if a_kw.strip():
-            with st.spinner("Scanning IT PDFs..."):
-                st.session_state.a_results = execute_pdf_search(selected_a_paper, a_kw)
+    if st.button("Search Paper 2", key="btn_search_p2"):
+        if p2_kw.strip():
+            with st.spinner("Scanning Paper 2 PDFs..."):
+                st.session_state.p2_results = execute_pdf_search("p2", p2_kw)
         else:
             st.warning("Please enter a keyword.")
 
-    if st.session_state.a_results:
-        st.write(f"Found **{len(st.session_state.a_results)}** matching page(s):")
-        for idx, item in enumerate(st.session_state.a_results):
+    if st.session_state.p2_results:
+        st.write(f"Found **{len(st.session_state.p2_results)}** matching page(s):")
+        for idx, item in enumerate(st.session_state.p2_results):
             with st.expander(f"📄 {item['file']} | Page {item['page'] + 1}"):
                 c1, c2 = st.columns([3, 1])
                 with c1:
@@ -434,7 +441,7 @@ with tab2:
                     if preview_img:
                         st.image(preview_img, use_container_width=True)
                 with c2:
-                    if st.button("➕ Add to Cart", key=f"add_a_{idx}"):
+                    if st.button("➕ Add to Cart", key=f"add_p2_{idx}"):
                         st.session_state.handout_basket.append(item)
                         st.toast(f"Added Page {item['page'] + 1} to cart!")
                         st.rerun()
@@ -447,16 +454,59 @@ with tab2:
                             data=pdf_f,
                             file_name=item["file"],
                             mime="application/pdf",
-                            key=f"dl_a_{idx}"
+                            key=f"dl_p2_{idx}"
                         )
 
-# --- TAB 3: CART & WORKSHEET GENERATOR ---
+# --- TAB 3: A LEVEL PRACTICAL (PAPER 4) ---
 with tab3:
-    st.subheader("🛒 PYP Cart and Worksheet generator")
+    st.subheader("⚙️ A Level Practical Search (Paper 4)")
+    
+    p4_kw = st.text_input(
+        "Enter Keywords", 
+        placeholder="e.g., JavaScript, Animation, Sound Editing, Vector Graphics, 3D Modeling", 
+        key="p4_kw"
+    )
+
+    if st.button("Search Paper 4", key="btn_search_p4"):
+        if p4_kw.strip():
+            with st.spinner("Scanning Paper 4 PDFs..."):
+                st.session_state.p4_results = execute_pdf_search("p4", p4_kw)
+        else:
+            st.warning("Please enter a keyword.")
+
+    if st.session_state.p4_results:
+        st.write(f"Found **{len(st.session_state.p4_results)}** matching page(s):")
+        for idx, item in enumerate(st.session_state.p4_results):
+            with st.expander(f"📄 {item['file']} | Page {item['page'] + 1}"):
+                c1, c2 = st.columns([3, 1])
+                with c1:
+                    preview_img = render_pdf_page_preview(item["path"], item["page"])
+                    if preview_img:
+                        st.image(preview_img, use_container_width=True)
+                with c2:
+                    if st.button("➕ Add to Cart", key=f"add_p4_{idx}"):
+                        st.session_state.handout_basket.append(item)
+                        st.toast(f"Added Page {item['page'] + 1} to cart!")
+                        st.rerun()
+                    
+                    st.markdown("<br>", unsafe_allow_html=True)
+                    
+                    with open(item["path"], "rb") as pdf_f:
+                        st.download_button(
+                            label="📥 Download Full PDF",
+                            data=pdf_f,
+                            file_name=item["file"],
+                            mime="application/pdf",
+                            key=f"dl_p4_{idx}"
+                        )
+
+# --- TAB 4: PYP CART & WORKSHEET GENERATOR ---
+with tab4:
+    st.subheader("🛒 PYP Cart & Handout Generator")
     
     if len(st.session_state.handout_basket) > 0:
         st.info(f"### 📋 Selected Question Pages ({len(st.session_state.handout_basket)} items)")
-        st.caption("Review your selected pages below. Expand any page to view preview or remove it before exporting.")
+        st.caption("Review your selected pages below. Remove any unwanted pages before compiling into Word format.")
         st.markdown("---")
         
         items_to_display = list(st.session_state.handout_basket)
@@ -487,7 +537,7 @@ with tab3:
 
         st.markdown("<br>", unsafe_allow_html=True)
         st.markdown("---")
-        st.markdown("### 📝 Export Worksheet")
+        st.markdown("### 📝 Export Handout / Worksheet")
         
         with st.spinner("Merging selected pages into Word Worksheet..."):
             doc_buffer = create_worksheet_docx(st.session_state.handout_basket)
@@ -501,21 +551,80 @@ with tab3:
             use_container_width=True
         )
     else:
-        st.info("🛒 Your Cart is currently empty! Search AS or A Level IT tabs and click '➕ Add to Cart' to start building your worksheet.")
+        st.info("🛒 Your Cart is empty! Search the Theory or Practical tabs and click '➕ Add to Cart' to start building your handout.")
 
-# --- TAB 4: ANSWER SCHEMES ---
-with tab4:
+# --- TAB 5: PRACTICAL SOURCE FILES (ZIP FILES) ---
+with tab5:
+    st.subheader("📦 Practical Source Files Repository (Paper 2 & Paper 4 ZIPs)")
+    st.caption("Search and download supporting practical files, data files, and assets.")
+
+    zip_folder_path = LOCAL_FOLDERS["zip_files"]
+    
+    col_zip_paper, col_zip_search = st.columns([1, 2])
+    with col_zip_paper:
+        target_zip_paper = st.selectbox(
+            "Filter Paper Component:", 
+            ["All Practical Papers", "Paper 2 (AS)", "Paper 4 (A Level)"],
+            key="zip_paper_filter"
+        )
+    with col_zip_search:
+        zip_query = st.text_input("Filter ZIP Files by Name or Session", placeholder="e.g. 2021, s21, w22, 9626_s22_sf_02", key="zip_query")
+
+    if os.path.exists(zip_folder_path):
+        all_zips = [f for f in os.listdir(zip_folder_path) if f.endswith(".zip") or f.endswith(".rar") or f.endswith(".7z")]
+        
+        # Filtering
+        filtered_zips = all_zips
+        if target_zip_paper == "Paper 2 (AS)":
+            filtered_zips = [f for f in filtered_zips if "_02" in f.lower() or "_2" in f.lower() or "p2" in f.lower()]
+        elif target_zip_paper == "Paper 4 (A Level)":
+            filtered_zips = [f for f in filtered_zips if "_04" in f.lower() or "_4" in f.lower() or "p4" in f.lower()]
+
+        if zip_query.strip():
+            filtered_zips = [f for f in filtered_zips if zip_query.lower() in f.lower()]
+
+        st.markdown("---")
+        if filtered_zips:
+            st.success(f"Found **{len(filtered_zips)}** Practical Source File(s):")
+            for z_file in sorted(filtered_zips):
+                c_name, c_btn = st.columns([3, 1])
+                full_z_path = os.path.join(zip_folder_path, z_file)
+                size_mb = os.path.getsize(full_z_path) / (1024 * 1024)
+                
+                with c_name:
+                    st.write(f"📦 **{z_file}** ({size_mb:.2f} MB)")
+                with c_btn:
+                    with open(full_z_path, "rb") as f_zip:
+                        st.download_button(
+                            label=f"📥 Download ZIP",
+                            data=f_zip,
+                            file_name=z_file,
+                            mime="application/zip",
+                            key=f"dl_zip_{z_file}"
+                        )
+        else:
+            st.warning("No ZIP files match your search criteria. Try syncing Google Drive.")
+    else:
+        st.warning("ZIP directory does not exist.")
+
+# --- TAB 6: ANSWER SCHEMES ---
+with tab6:
     st.subheader("🔑 Download Marking Schemes")
     
-    col_level, col_y, col_m, col_v = st.columns([2, 1, 2, 2])
+    col_paper, col_y, col_m, col_v = st.columns([2, 1, 1.5, 1.5])
     
-    with col_level:
-        target_level = st.selectbox(
-            "Select Qualification Level", 
-            ["AS Level (Papers 1 & 2)", "A Level (Papers 3 & 4)"],
-            key="ms_level"
+    with col_paper:
+        target_paper_selection = st.selectbox(
+            "Select Target Paper Component:", 
+            ["Paper 1", "Paper 2", "Paper 3", "Paper 4"],
+            key="ms_paper_select"
         )
-        folder_key = "ms_p1_p2" if "AS Level" in target_level else "ms_p3_p4"
+        
+        # Route to appropriate local folder based on selected paper
+        if target_paper_selection in ["Paper 1", "Paper 3"]:
+            ms_folder_key = "ms_p1_p3"
+        else:
+            ms_folder_key = "ms_p2_p4"
 
     with col_y:
         as_year = st.text_input(
@@ -527,17 +636,23 @@ with tab4:
 
     with col_m:
         as_month = st.selectbox(
-            "Select Session", 
-            [" June (s) ", " November (w) "], 
+            "Session", 
+            [" June (s) ", " November (w) ", " March (m) "], 
             key="ms_mth"
         )
-        month_code = "s" if "June" in as_month else "w"
+        if "June" in as_month:
+            month_code = "s"
+        elif "November" in as_month:
+            month_code = "w"
+        else:
+            month_code = "m"
             
     with col_v:
+        paper_num = target_paper_selection.split(" ")[1]  # Extract 1, 2, 3, or 4
+        default_variants = [f"{paper_num}1", f"{paper_num}2", f"{paper_num}3"]
         as_variant = st.selectbox(
             "Select Variant", 
-            ["11", "12", "13", "21", "22", "23", "31", "32", "33", "41", "42", "43"], 
-            index=1,
+            default_variants, 
             key="ms_var"
         )
 
@@ -550,7 +665,7 @@ with tab4:
     st.markdown("---")
     
     found_ms_files = []
-    folder_path = LOCAL_FOLDERS[folder_key]
+    folder_path = LOCAL_FOLDERS[ms_folder_key]
 
     if os.path.exists(folder_path):
         for file in os.listdir(folder_path):
@@ -569,7 +684,7 @@ with tab4:
             ms_filename = os.path.basename(ms_path)
             
             with st.expander(f"🔑 Mark Scheme: {ms_filename}", expanded=True):
-                col_dl, col_blank = st.columns([1, 2])
+                col_dl, _ = st.columns([1, 2])
                 with col_dl:
                     with open(ms_path, "rb") as f:
                         st.download_button(
@@ -582,9 +697,9 @@ with tab4:
                 
                 doc = fitz.open(ms_path)
                 total_pages = len(doc)
-                st.caption(f"📜 Showing all **{total_pages}** pages below. Scroll down inside the window to read the entire Mark Scheme:")
+                st.caption(f"📜 Showing all **{total_pages}** pages below:")
                 
-                # --- SCROLLABLE CONTAINER (Height: 650px) ---
+                # --- SCROLLABLE CONTAINER ---
                 with st.container(height=650):
                     for page_num in range(total_pages):
                         page_img = render_pdf_page_preview(ms_path, page_num)
@@ -595,17 +710,17 @@ with tab4:
                                 use_container_width=True
                             )
                             if page_num < total_pages - 1:
-                                st.markdown("---")  # Visual divider between pages
+                                st.markdown("---")
                         
                 doc.close()
     else:
         st.warning(f"No Mark Scheme found matching session `{search_session_tag}` and variant `{as_variant}` (Expected pattern: `{expected_ms_filename}`).")
         st.info("💡 **Tip**: Click **Sync Google Drive** from the sidebar to fetch updated mark scheme files into local storage.")
 
-# --- TAB 5: UPLOAD PYP / ADMIN DASHBOARD ---
-with tab5:
-    st.subheader("⚙️ Upload PYP and Admin dashboard")
-    st.caption("Secure admin portal for managing the 6 Google Drive repositories for IT 9626.")
+# --- TAB 7: ADMIN PANEL (6 GOOGLE DRIVE FOLDERS) ---
+with tab7:
+    st.subheader("🔒 Administrator Control Panel")
+    st.caption("Manage Google Drive repositories across all 6 subject partitions.")
 
     admin_pwd = st.secrets.get("ADMIN_PASSWORD", "")
     pwd_input = st.text_input("Enter Admin Password", type="password", key="admin_pwd_input")
@@ -615,25 +730,25 @@ with tab5:
         st.markdown("---")
         
         st.markdown("### 🌐 Google Drive Web Repositories")
-        st.info("💡 **Instructions**: Click any button below to open its respective Google Drive folder in a new tab. You can drag and drop your new PDF files directly into the folder.")
+        st.info("💡 Click any button below to open its respective Google Drive folder in a new tab where you can upload new files.")
         
         drive_links = st.secrets.get("drive_web_links", {})
 
         c1, c2, c3 = st.columns(3)
         with c1:
-            st.link_button("📚 AS Level IT Paper 1", drive_links.get("p1_it", "https://drive.google.com"), use_container_width=True)
+            st.link_button("📖 1. Papers 1 & 3 (Theory)", drive_links.get("p1_p3", "https://drive.google.com"), use_container_width=True)
             st.markdown("<br>", unsafe_allow_html=True)
-            st.link_button("🔑 Marking Schemes Paper 1&2", drive_links.get("ms_p1_p2", "https://drive.google.com"), use_container_width=True)
+            st.link_button("📦 4. Practical Source Files (ZIP)", drive_links.get("zip_files", "https://drive.google.com"), use_container_width=True)
             
         with c2:
-            st.link_button("📚 AS Level IT Paper 2", drive_links.get("p2_it", "https://drive.google.com"), use_container_width=True)
+            st.link_button("💻 2. Paper 2 (AS Practical)", drive_links.get("p2", "https://drive.google.com"), use_container_width=True)
             st.markdown("<br>", unsafe_allow_html=True)
-            st.link_button("🔑 Marking Schemes Paper 3&4", drive_links.get("ms_p3_p4", "https://drive.google.com"), use_container_width=True)
+            st.link_button("🔑 5. Answer Schemes (P1 & P3)", drive_links.get("ms_p1_p3", "https://drive.google.com"), use_container_width=True)
             
         with c3:
-            st.link_button("📚 A Level IT Paper 3", drive_links.get("p3_it", "https://drive.google.com"), use_container_width=True)
+            st.link_button("⚙️ 3. Paper 4 (A Practical)", drive_links.get("p4", "https://drive.google.com"), use_container_width=True)
             st.markdown("<br>", unsafe_allow_html=True)
-            st.link_button("📚 A Level IT Paper 4", drive_links.get("p4_it", "https://drive.google.com"), use_container_width=True)
+            st.link_button("🔑 6. Answer Schemes (P2 & P4)", drive_links.get("ms_p2_p4", "https://drive.google.com"), use_container_width=True)
 
     elif pwd_input:
         st.error("Incorrect Admin Password.")
