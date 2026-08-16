@@ -22,7 +22,7 @@ from googleapiclient.http import MediaIoBaseDownload
 # 0. STREAMLIT PAGE CONFIG & CUSTOM STYLING
 # ==========================================
 st.set_page_config(
-    page_title="9626 IT PYP Portal", 
+    page_title="9626 Info Tech PYP Portal", 
     page_icon="💻",
     layout="wide"
 )
