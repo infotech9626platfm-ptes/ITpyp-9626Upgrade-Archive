@@ -348,13 +348,13 @@ with st.sidebar:
 
 # --- NAVIGATION TABS (7 TABS TOTAL) ---
 tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs([
-    "📖 Theory (P1 & P3)", 
-    "💻 AS Practical (P2)", 
-    "⚙️ A Practical (P4)", 
+    "📖 Theory P1/P3", 
+    "💻 Practical P2", 
+    "⚙️ Practical P4", 
     "🛒 PYP Cart", 
-    "📦 Source Files (ZIP)", 
-    "🔑 Answer Schemes", 
-    "🔒 Admin Panel"
+    "📦 ZIP Source", 
+    "🔑 Mark_Schm", 
+    "🔒 Upload PYP"
 ])
 
 # --- TAB 1: THEORY PAPERS (PAPER 1 & PAPER 3) ---
